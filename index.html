@@ -1,0 +1,459 @@
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Sleep Detector</title>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+
+<style>
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #070b16;
+    color: white;
+    font-family: Arial, sans-serif;
+    min-height: 100vh;
+    padding: 30px 15px;
+}
+
+body.sleeping {
+    animation: screenFlash 0.25s infinite alternate;
+}
+
+@keyframes screenFlash {
+    from { background: #06150c; }
+    to { background: #00a83c; }
+}
+
+.container {
+    max-width: 1000px;
+    margin: auto;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 35px;
+}
+
+header h1 {
+    font-size: 38px;
+    color: #00d9ff;
+    text-shadow: 0 0 20px #00bfff;
+}
+
+header p {
+    margin-top: 12px;
+    color: #8299b9;
+}
+
+.dashboard {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 22px;
+}
+
+.card {
+    background: #111a2b;
+    border: 1px solid #294361;
+    border-radius: 20px;
+    padding: 25px;
+}
+
+.card h2 {
+    color: #00d9ff;
+    margin-bottom: 20px;
+}
+
+.camera {
+    min-height: 320px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border: 3px solid #17618c;
+    border-radius: 15px;
+    background: #030711;
+}
+
+.camera canvas {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.camera.sleeping {
+    animation: cameraFlash 0.3s infinite alternate;
+}
+
+@keyframes cameraFlash {
+    from {
+        border-color: #00ff00;
+        box-shadow: 0 0 20px #00ff00,
+                    0 0 60px #00ff00,
+                    inset 0 0 25px #00ff00;
+    }
+    to {
+        border-color: white;
+        box-shadow: 0 0 50px #00ff00,
+                    0 0 120px #00ff00,
+                    0 0 180px #00ff00,
+                    inset 0 0 60px #00ff00;
+    }
+}
+
+.placeholder {
+    text-align: center;
+    color: #7189a8;
+    line-height: 2;
+}
+
+.buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+button {
+    flex: 1;
+    padding: 15px;
+    border: none;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+
+.start {
+    background: #00cfff;
+    color: #00101b;
+}
+
+.stop {
+    background: #34435b;
+    color: white;
+}
+
+.status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 20px;
+    color: #a0b3ce;
+    font-size: 14px;
+}
+
+.dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #64748b;
+}
+
+.dot.active {
+    background: #00ff88;
+    box-shadow: 0 0 12px #00ff88;
+}
+
+.result {
+    padding: 22px;
+    background: #071324;
+    border-radius: 15px;
+    margin-bottom: 25px;
+    border: 1px solid #23466a;
+}
+
+.result small {
+    color: #849bb9;
+    letter-spacing: 2px;
+}
+
+.result h3 {
+    font-size: 30px;
+    margin-top: 15px;
+    color: #00eaff;
+}
+
+.result p {
+    color: #9ab0ca;
+    margin-top: 10px;
+}
+
+.prediction {
+    margin-bottom: 18px;
+}
+
+.prediction-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.prediction-info span:last-child {
+    color: #00eaff;
+}
+
+.bar {
+    height: 10px;
+    background: #26364d;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.fill {
+    height: 100%;
+    background: linear-gradient(90deg, #007bff, #00ffcc);
+    transition: width .2s;
+}
+
+@media(max-width: 750px) {
+    .dashboard {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<header>
+    <h1>AI SLEEP DETECTOR</h1>
+    <p>REAL TIME ARTIFICIAL INTELLIGENCE</p>
+</header>
+
+<div class="dashboard">
+
+<section class="card">
+    <h2>CAMERA</h2>
+
+    <div class="camera" id="camera">
+        <div class="placeholder">
+            CAMERA OFFLINE<br>
+            PRESS START
+        </div>
+    </div>
+
+    <div class="buttons">
+        <button class="start" id="startBtn" onclick="startCamera()">
+            START
+        </button>
+        <button class="stop" id="stopBtn" onclick="stopCamera()" disabled>
+            STOP
+        </button>
+    </div>
+
+    <div class="status">
+        <div class="dot" id="dot"></div>
+        <span id="status">SYSTEM OFFLINE</span>
+    </div>
+</section>
+
+<section class="card">
+    <h2>AI DETECTION</h2>
+
+    <div class="result">
+        <small>CURRENT STATE</small>
+        <h3 id="mainResult">WAITING...</h3>
+        <p id="confidence">CONFIDENCE: 0%</p>
+    </div>
+
+    <h2>PREDICTIONS</h2>
+    <div id="predictions">
+        Waiting for camera...
+    </div>
+</section>
+
+</div>
+</div>
+
+<script>
+
+const URL = "https://teachablemachine.withgoogle.com/models/0HIXlzYdd/";
+
+let model;
+let webcam;
+let running = false;
+let busy = false;
+let animationId = null;
+
+const THRESHOLD = 0.60;
+
+async function startCamera() {
+    if (running) return;
+
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("status").textContent = "LOADING MODEL...";
+
+    try {
+        model = await tmImage.load(
+            URL + "model.json",
+            URL + "metadata.json"
+        );
+
+        webcam = new tmImage.Webcam(320, 320, true);
+
+        await webcam.setup();
+        await webcam.play();
+
+        document.getElementById("camera").innerHTML = "";
+        document.getElementById("camera").appendChild(webcam.canvas);
+
+        running = true;
+
+        document.getElementById("dot").classList.add("active");
+        document.getElementById("stopBtn").disabled = false;
+
+        document.getElementById("status").textContent = "SCANNING...";
+
+        loop();
+
+    } catch(error) {
+        console.error(error);
+        document.getElementById("status").textContent = "ERROR: " + error.message;
+        document.getElementById("startBtn").disabled = false;
+    }
+}
+
+async function loop() {
+    if (!running || busy) return;
+
+    busy = true;
+
+    try {
+        webcam.update();
+
+        const prediction = await model.predict(webcam.canvas);
+
+        prediction.sort((a, b) => b.probability - a.probability);
+
+        const best = prediction[0];
+        const className = best.className.trim().toLowerCase();
+        const percent = best.probability * 100;
+
+        // Проверяем норвежские названия классов
+        const sleeping = className === "sovende";
+        const awake = className === "våken";
+
+        // Включаем мигание только при SOVENDE
+        const shouldFlash = sleeping && best.probability >= THRESHOLD;
+
+        document.body.classList.toggle("sleeping", shouldFlash);
+        document.getElementById("camera").classList.toggle("sleeping", shouldFlash);
+
+        if (sleeping) {
+            document.getElementById("mainResult").textContent = "😴 SOVENDE";
+        } else if (awake) {
+            document.getElementById("mainResult").textContent = "👀 VÅKEN";
+        } else {
+            document.getElementById("mainResult").textContent = className.toUpperCase();
+        }
+
+        document.getElementById("confidence").textContent =
+            "CONFIDENCE: " + percent.toFixed(1) + "%";
+
+        if (shouldFlash) {
+            document.getElementById("status").textContent = "😴 SLEEP DETECTED!";
+        } else if (sleeping) {
+            document.getElementById("status").textContent = "CHECKING...";
+        } else if (awake) {
+            document.getElementById("status").textContent = "👀 AWAKE - FLASH OFF";
+        } else {
+            document.getElementById("status").textContent = "SCANNING...";
+        }
+
+        const container = document.getElementById("predictions");
+        container.innerHTML = "";
+
+        prediction.forEach(item => {
+            const value = item.probability * 100;
+
+            const div = document.createElement("div");
+            div.className = "prediction";
+
+            const info = document.createElement("div");
+            info.className = "prediction-info";
+
+            const name = document.createElement("span");
+            name.textContent = item.className;
+
+            const number = document.createElement("span");
+            number.textContent = value.toFixed(1) + "%";
+
+            info.append(name, number);
+
+            const bar = document.createElement("div");
+            bar.className = "bar";
+
+            const fill = document.createElement("div");
+            fill.className = "fill";
+            fill.style.width = value + "%";
+
+            bar.appendChild(fill);
+            div.append(info, bar);
+            container.appendChild(div);
+        });
+
+    } catch(error) {
+        console.error(error);
+    }
+
+    busy = false;
+
+    if (running) {
+        animationId = requestAnimationFrame(loop);
+    }
+}
+
+function stopCamera() {
+    running = false;
+
+    if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+    }
+
+    if (webcam) {
+        webcam.stop();
+        webcam = null;
+    }
+
+    busy = false;
+
+    document.body.classList.remove("sleeping");
+
+    document.getElementById("camera").classList.remove("sleeping");
+
+    document.getElementById("camera").innerHTML = `
+        <div class="placeholder">
+            CAMERA OFFLINE<br>
+            PRESS START
+        </div>
+    `;
+
+    document.getElementById("dot").classList.remove("active");
+    document.getElementById("status").textContent = "SYSTEM OFFLINE";
+
+    document.getElementById("mainResult").textContent = "WAITING...";
+    document.getElementById("confidence").textContent = "CONFIDENCE: 0%";
+
+    document.getElementById("predictions").textContent = "Waiting for camera...";
+
+    document.getElementById("startBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+}
+
+</script>
+</body>
+</html>
